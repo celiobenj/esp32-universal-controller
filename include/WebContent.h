@@ -84,7 +84,10 @@ input[type=range]::-webkit-slider-runnable-track { width: 100%; height: 4px; cur
 
 <header>
   <div style="font-size:16px; font-weight:bold;">ESP32 Universal Controller</div>
-  <div class="status-dot" id="ws-status" title="Disconnected"></div>
+  <div class="d-flex">
+    <span id="global-status" style="padding: 4px 8px; border-radius: 4px; background: var(--border); font-size: 11px; font-weight: bold; margin-right: 15px; color: var(--text-sec);">[○ PARADO]</span>
+    <div class="status-dot" id="ws-status" title="Disconnected"></div>
+  </div>
 </header>
 
 <div class="tabs">
@@ -104,17 +107,18 @@ input[type=range]::-webkit-slider-runnable-track { width: 100%; height: 4px; cur
       <div class="grid-2">
         <div class="form-group">
           <label>GPIO</label>
-          <select id="io-in-pin">
+          <select id="io-in-pin" onchange="validatePins()">
             <option value="-1">Nenhum</option>
             <option value="4">4</option><option value="5">5</option><option value="13">13</option><option value="14">14</option><option value="15">15</option><option value="16">16</option><option value="17">17</option><option value="18">18</option><option value="19">19</option><option value="21">21</option><option value="22">22</option><option value="23">23</option><option value="25">25</option><option value="26">26</option><option value="27">27</option><option value="32">32</option><option value="33">33</option><option value="34">34</option><option value="35">35</option><option value="36">36</option><option value="39">39</option>
           </select>
         </div>
         <div class="form-group">
           <label>Modo</label>
-          <select id="io-in-mode" onchange="toggleADCParams()">
+          <select id="io-in-mode" onchange="toggleADCParams(); validatePins();">
             <option value="1">Entrada Digital</option>
             <option value="3">Entrada Analógica (ADC)</option>
           </select>
+          <div id="io-pin-error" style="color: var(--danger); font-size: 11px; margin-top: 5px; display: none;">Pino inválido para ADC. Use 32, 33, 34, 35, 36 ou 39.</div>
         </div>
       </div>
       <div id="adc-params" class="grid-3 hidden">
@@ -174,7 +178,7 @@ input[type=range]::-webkit-slider-runnable-track { width: 100%; height: 4px; cur
       </div>
     </div>
     
-    <button class="btn btn-primary" onclick="applyIO()">Aplicar I/O</button>
+    <button id="btn-apply-io" class="btn btn-primary" onclick="applyIO()">Aplicar I/O</button>
   </div>
 
   <!-- TAB 2: CONTROLE -->
@@ -189,7 +193,9 @@ input[type=range]::-webkit-slider-runnable-track { width: 100%; height: 4px; cur
       </div>
 
       <div id="strat-0" class="strat-panel">
-        <p style="color:var(--text-sec)">Nenhum parâmetro necessário.</p>
+        <div style="background:var(--bg-body); padding:10px; border-radius:4px; margin-bottom:15px; border:1px solid var(--border); text-align:center;">
+          <p style="color:var(--text-sec)">Estratégia direta: A saída seguirá a entrada e o setpoint não é utilizado.</p>
+        </div>
       </div>
       <div id="strat-1" class="strat-panel hidden">
         <div class="grid-2">
@@ -230,10 +236,10 @@ input[type=range]::-webkit-slider-runnable-track { width: 100%; height: 4px; cur
     </div>
 
     <div class="card">
-      <h2>Limites de Saída</h2>
+      <h2>Limites de Saída <small style="color:var(--text-sec); font-size:11px; font-weight:normal; margin-left:10px;">(Define a faixa útil do atuador)</small></h2>
       <div class="grid-2">
-        <div class="form-group"><label>Mínimo</label><input type="number" id="out-min" value="0"></div>
-        <div class="form-group"><label>Máximo</label><input type="number" id="out-max" value="1023"></div>
+        <div class="form-group"><label>Mínimo</label><input type="number" id="out-min" value="0" min="0" max="1023"></div>
+        <div class="form-group"><label>Máximo</label><input type="number" id="out-max" value="1023" min="0" max="1023"></div>
       </div>
     </div>
 
@@ -276,7 +282,9 @@ input[type=range]::-webkit-slider-runnable-track { width: 100%; height: 4px; cur
   <!-- TAB 4: SISTEMA -->
   <div id="tab-sys" class="panel">
     <div class="sys-status">
+      <div class="sys-box"><span>Hostname</span><span id="sys-host">--</span></div>
       <div class="sys-box"><span>IP Address</span><span id="sys-ip">--</span></div>
+      <div class="sys-box"><span>Wi-Fi SSID</span><span id="sys-ssid">--</span></div>
       <div class="sys-box"><span>RSSI Wi-Fi</span><span id="sys-rssi">--</span></div>
       <div class="sys-box"><span>Uptime</span><span id="sys-up">--</span></div>
       <div class="sys-box"><span>Free Heap</span><span id="sys-heap">--</span></div>
@@ -316,6 +324,39 @@ function showTab(id, el) {
   if(el) el.classList.add('active');
 }
 
+function updateGlobalStatus(running) {
+  const badge = document.getElementById('global-status');
+  if(running) {
+    badge.innerText = '[● RODANDO]';
+    badge.style.background = 'var(--success)';
+    badge.style.color = '#fff';
+  } else {
+    badge.innerText = '[○ PARADO]';
+    badge.style.background = 'var(--border)';
+    badge.style.color = 'var(--text-sec)';
+  }
+}
+
+function validatePins() {
+  const mode = document.getElementById('io-in-mode').value;
+  const pin = parseInt(document.getElementById('io-in-pin').value);
+  const errDiv = document.getElementById('io-pin-error');
+  const btn = document.getElementById('btn-apply-io');
+  
+  if (mode === '3') { // Analog Input
+    const validADC1 = [32, 33, 34, 35, 36, 39];
+    if (pin !== -1 && !validADC1.includes(pin)) {
+      errDiv.style.display = 'block';
+      btn.disabled = true;
+      btn.style.opacity = '0.5';
+      return;
+    }
+  }
+  errDiv.style.display = 'none';
+  btn.disabled = false;
+  btn.style.opacity = '1';
+}
+
 function toggleADCParams() {
   const mode = document.getElementById('io-in-mode').value;
   const p = document.getElementById('adc-params');
@@ -340,6 +381,13 @@ function updateStrategyUI() {
   const val = document.querySelector('input[name="strategy"]:checked').value;
   document.querySelectorAll('.strat-panel').forEach(p => p.classList.add('hidden'));
   document.getElementById('strat-'+val).classList.remove('hidden');
+  
+  const w = document.getElementById('web-sp-panel');
+  if (val === '0') {
+    w.classList.add('hidden'); // Hide setpoint for direct mode
+  } else if (!document.getElementById('ext-sp-en').checked) {
+    w.classList.remove('hidden');
+  }
 }
 
 function showMsg(msg, isErr=false) {
@@ -462,6 +510,7 @@ function handleConfig(cfg) {
     toggleADCParams();
     togglePWMParams();
     toggleExtSP();
+    validatePins();
   }
   if(cfg.ctrl) {
     document.querySelector(`input[name="strategy"][value="${cfg.ctrl.strategy}"]`).checked = true;
@@ -486,27 +535,31 @@ function handleConfig(cfg) {
     document.getElementById('out-max').value = cfg.ctrl.outputMax;
     document.getElementById('sp-input').value = cfg.ctrl.setpoint;
     document.getElementById('sp-slider').value = cfg.ctrl.setpoint;
+    if (cfg.ctrl.running !== undefined) updateGlobalStatus(cfg.ctrl.running);
   }
 }
 
 function handleStatus(st) {
   if(st.ip) document.getElementById('sys-ip').innerText = st.ip;
-  if(st.rssi) document.getElementById('sys-rssi').innerText = st.rssi + " dBm";
+  if(st.ssid) document.getElementById('sys-ssid').innerText = st.ssid;
+  if(st.hostname) document.getElementById('sys-host').innerText = st.hostname;
+  if(st.rssi !== undefined) document.getElementById('sys-rssi').innerText = st.rssi + " dBm";
   if(st.uptime) document.getElementById('sys-up').innerText = st.uptime + " s";
   if(st.heap) document.getElementById('sys-heap').innerText = st.heap + " B";
+  if(st.running !== undefined) updateGlobalStatus(st.running);
 }
 
 function handleTel(t) {
-  if(t0 === 0) t0 = t.timestamp;
-  const rel = (t.timestamp - t0)/1000.0;
+  if(t0 === 0) t0 = t.t;
+  const rel = (t.t - t0)/1000.0;
   
   tData.t.push(rel);
-  tData.in.push(t.input);
-  tData.out.push(t.output);
-  tData.sp.push(t.setpoint);
-  tData.err.push(t.error);
+  tData.in.push(t.in);
+  tData.out.push(t.out);
+  tData.sp.push(t.sp);
+  tData.err.push(t.err);
   
-  csvHistory.push(`${t.timestamp},${t.input},${t.output},${t.setpoint},${t.error}`);
+  csvHistory.push(`${t.t},${t.in},${t.out},${t.sp},${t.err}`);
   
   if(tData.t.length > plotterBufSize) {
     tData.t.shift();
@@ -516,10 +569,10 @@ function handleTel(t) {
     tData.err.shift();
   }
   
-  document.getElementById('ind-in').innerText = t.input.toFixed(2);
-  document.getElementById('ind-out').innerText = t.output.toFixed(2);
-  document.getElementById('ind-sp').innerText = t.setpoint.toFixed(2);
-  document.getElementById('ind-err').innerText = t.error.toFixed(2);
+  document.getElementById('ind-in').innerText = t.in.toFixed(2);
+  document.getElementById('ind-out').innerText = t.out.toFixed(2);
+  document.getElementById('ind-sp').innerText = t.sp.toFixed(2);
+  document.getElementById('ind-err').innerText = t.err.toFixed(2);
   
   requestAnimationFrame(drawPlot);
 }

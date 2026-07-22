@@ -19,6 +19,7 @@
 #include "StorageManager.h"
 #include "ControlEngine.h"
 #include "WebManager.h"
+#include <ESPmDNS.h>
 
 // ============================================================
 //  Global Instances
@@ -65,6 +66,14 @@ void setupWiFi() {
     } else {
         Serial.println(" STA     : No credentials stored");
     }
+
+    // Initialize mDNS
+    if (MDNS.begin("controle-esp")) {
+        MDNS.addService("http", "tcp", 80);
+        Serial.println(" mDNS    : http://controle-esp.local");
+    } else {
+        Serial.println(" mDNS    : Failed to start");
+    }
     Serial.println("--------------------------------------");
 }
 
@@ -90,7 +99,8 @@ void setup() {
         ControlConfig ctrlCfg = storage.loadControlConfig();
         engine.setIOConfig(ioCfg);
         engine.setControlConfig(ctrlCfg);
-        Serial.println("[Boot] Loaded config from NVS");
+        Serial.printf("[Boot] Loaded config from NVS: I/O in:%d out:%d, Ctrl strat:%d run:%d\n", 
+                      ioCfg.inputPin, ioCfg.outputPin, (int)ctrlCfg.strategy, ctrlCfg.running);
     } else {
         Serial.println("[Boot] No stored config, using defaults");
     }

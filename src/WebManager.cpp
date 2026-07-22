@@ -47,14 +47,19 @@ void WebManager::loop() {
         JsonDocument doc;
         doc["type"] = "tel";
         doc["t"]    = pkt.timestamp;
-        doc["in"]   = serialized(String(pkt.input, 2));
-        doc["out"]  = serialized(String(pkt.output, 2));
-        doc["sp"]   = serialized(String(pkt.setpoint, 2));
-        doc["err"]  = serialized(String(pkt.error, 2));
+        
+        // Use 2 decimal precision natively, avoiding String allocations
+        doc["in"]   = round(pkt.input * 100.0) / 100.0;
+        doc["out"]  = round(pkt.output * 100.0) / 100.0;
+        doc["sp"]   = round(pkt.setpoint * 100.0) / 100.0;
+        doc["err"]  = round(pkt.error * 100.0) / 100.0;
 
-        String msg;
-        serializeJson(doc, msg);
-        _ws.textAll(msg);
+        // Only serialize and send if there are connected clients
+        if (_ws.count() > 0) {
+            String msg;
+            serializeJson(doc, msg);
+            _ws.textAll(msg);
+        }
     }
 
     // Periodic cleanup of disconnected clients
@@ -436,14 +441,22 @@ String WebManager::_statusToJson() {
     if (WiFi.status() == WL_CONNECTED) {
         doc["ip"]   = WiFi.localIP().toString();
         doc["rssi"] = WiFi.RSSI();
+        doc["ssid"] = WiFi.SSID();
     } else {
         doc["ip"]   = WiFi.softAPIP().toString();
         doc["rssi"] = 0;
+        doc["ssid"] = WiFi.softAPSSID();
     }
 
     // System info
-    doc["uptime"] = millis() / 1000;
-    doc["heap"]   = ESP.getFreeHeap();
+    doc["uptime"]   = millis() / 1000;
+    doc["heap"]     = ESP.getFreeHeap();
+    doc["hostname"] = "controle-esp.local";
+    
+    // Control Status
+    if (_engine) {
+        doc["running"] = _engine->getControlConfig().running;
+    }
 
     String msg;
     serializeJson(doc, msg);

@@ -19,6 +19,9 @@ void HALManager::updateConfig(const IOConfig& config) {
 }
 
 void HALManager::_configureInput() {
+    // Ensure 12-bit ADC resolution for consistent 0-4095 range
+    analogReadResolution(12);
+    
     if (_config.inputPin >= 0) {
         pinMode(_config.inputPin, INPUT);
     }
@@ -30,9 +33,14 @@ void HALManager::_configureInput() {
 void HALManager::_configureOutput() {
     if (_config.outputPin >= 0) {
         if (_config.outputMode == PinMode_t::PWM_OUTPUT) {
+#if ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(5, 0, 0)
+            // Arduino Core v3.x LEDC API
+            ledcAttach(_config.outputPin, _config.pwmFrequency, PWM_RESOLUTION_BITS);
+#else
             // Arduino Core v2.x LEDC API
             ledcSetup(LEDC_CHANNEL, _config.pwmFrequency, PWM_RESOLUTION_BITS);
             ledcAttachPin(_config.outputPin, LEDC_CHANNEL);
+#endif
         } else if (_config.outputMode == PinMode_t::DIGITAL_OUTPUT) {
             pinMode(_config.outputPin, OUTPUT);
             digitalWrite(_config.outputPin, LOW);
@@ -43,7 +51,11 @@ void HALManager::_configureOutput() {
 void HALManager::_teardown() {
     if (_config.outputPin >= 0) {
         if (_config.outputMode == PinMode_t::PWM_OUTPUT) {
+#if ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(5, 0, 0)
+            ledcDetach(_config.outputPin);
+#else
             ledcDetachPin(_config.outputPin);
+#endif
         }
         pinMode(_config.outputPin, INPUT);
     }
@@ -110,6 +122,10 @@ void HALManager::writeOutput(float value) {
     } else if (_config.outputMode == PinMode_t::PWM_OUTPUT) {
         if (value < 0.0f) value = 0.0f;
         if (value > PWM_MAX_DUTY) value = PWM_MAX_DUTY;
+#if ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(5, 0, 0)
+        ledcWrite(_config.outputPin, (uint32_t)value);
+#else
         ledcWrite(LEDC_CHANNEL, (uint32_t)value);
+#endif
     }
 }

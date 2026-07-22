@@ -21,7 +21,7 @@ void ControlEngine::start() {
         xTaskCreatePinnedToCore(
             _taskFunc, 
             "CtrlEngine", 
-            4096, 
+            8192, 
             this, 
             10, 
             &_taskHandle, 
