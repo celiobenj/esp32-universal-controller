@@ -58,8 +58,19 @@ void WebManager::loop() {
         if (_ws.count() > 0) {
             String msg;
             serializeJson(doc, msg);
-            _ws.textAll(msg);
+            for (auto& client : _ws.getClients()) {
+                if (client.status() == WS_CONNECTED && client.canSend()) {
+                    client.text(msg);
+                }
+            }
         }
+    }
+
+    // Periodic ping to keep WebSocket alive and avoid TCP timeouts
+    static unsigned long lastPing = 0;
+    if (millis() - lastPing > 5000) {
+        if (_ws.count() > 0) _ws.pingAll();
+        lastPing = millis();
     }
 
     // Periodic cleanup of disconnected clients
@@ -122,6 +133,27 @@ void WebManager::_setupRoutes() {
                 memcpy((uint8_t*)req->_tempObject + index, data, len);
                 if (index + len == total) {
                     _handlePostControlConfig(req, (uint8_t*)req->_tempObject, total);
+                    free(req->_tempObject);
+                    req->_tempObject = nullptr;
+                }
+            }
+        }
+    );
+
+    // --- POST Import Configuration ---
+    _server.on("/api/import-config", HTTP_POST,
+        [](AsyncWebServerRequest* req) {},
+        nullptr,
+        [this](AsyncWebServerRequest* req, uint8_t* data, size_t len,
+               size_t index, size_t total) {
+            if (index == 0) {
+                req->_tempObject = malloc(total + 1);
+                if (req->_tempObject) memset(req->_tempObject, 0, total + 1);
+            }
+            if (req->_tempObject) {
+                memcpy((uint8_t*)req->_tempObject + index, data, len);
+                if (index + len == total) {
+                    _handlePostImportConfig(req, (uint8_t*)req->_tempObject, total);
                     free(req->_tempObject);
                     req->_tempObject = nullptr;
                 }
@@ -277,6 +309,67 @@ void WebManager::_handlePostControlConfig(AsyncWebServerRequest* req, uint8_t* d
 
     _engine->setControlConfig(ctrl);
     Serial.println("[WebManager] Control config updated");
+    req->send(200, "application/json", "{\"ok\":true}");
+}
+
+void WebManager::_handlePostImportConfig(AsyncWebServerRequest* req, uint8_t* data, size_t len) {
+    JsonDocument doc;
+    DeserializationError err = deserializeJson(doc, data, len);
+    if (err || !doc["io"].is<JsonObject>() || !doc["ctrl"].is<JsonObject>()) {
+        req->send(400, "application/json", "{\"error\":\"Invalid Configuration JSON\"}");
+        return;
+    }
+
+    // Import IO Config
+    JsonObject ioDoc = doc["io"].as<JsonObject>();
+    IOConfig io = _engine->getIOConfig();
+    if (ioDoc["inputPin"].is<JsonVariant>())        io.inputPin        = ioDoc["inputPin"].as<int8_t>();
+    if (ioDoc["inputMode"].is<JsonVariant>())       io.inputMode       = (PinMode_t)ioDoc["inputMode"].as<uint8_t>();
+    if (ioDoc["outputPin"].is<JsonVariant>())       io.outputPin       = ioDoc["outputPin"].as<int8_t>();
+    if (ioDoc["outputMode"].is<JsonVariant>())      io.outputMode      = (PinMode_t)ioDoc["outputMode"].as<uint8_t>();
+    if (ioDoc["inputGain"].is<JsonVariant>())       io.inputGain       = ioDoc["inputGain"].as<float>();
+    if (ioDoc["inputOffset"].is<JsonVariant>())     io.inputOffset     = ioDoc["inputOffset"].as<float>();
+    if (ioDoc["movingAvgSamples"].is<JsonVariant>())io.movingAvgSamples= ioDoc["movingAvgSamples"].as<uint8_t>();
+    if (ioDoc["pwmFrequency"].is<JsonVariant>())    io.pwmFrequency    = ioDoc["pwmFrequency"].as<uint32_t>();
+    if (ioDoc["setpointPin"].is<JsonVariant>())     io.setpointPin     = ioDoc["setpointPin"].as<int8_t>();
+    if (ioDoc["setpointSource"].is<JsonVariant>())  io.setpointSource  = (SetpointSrc_t)ioDoc["setpointSource"].as<uint8_t>();
+    _engine->setIOConfig(io);
+
+    // Import Control Config
+    JsonObject ctrlDoc = doc["ctrl"].as<JsonObject>();
+    ControlConfig ctrl = _engine->getControlConfig();
+    if (ctrlDoc["strategy"].is<JsonVariant>())  ctrl.strategy  = (Strategy_t)ctrlDoc["strategy"].as<uint8_t>();
+    if (ctrlDoc["kp"].is<JsonVariant>())        ctrl.kp        = ctrlDoc["kp"].as<float>();
+    if (ctrlDoc["ki"].is<JsonVariant>())        ctrl.ki        = ctrlDoc["ki"].as<float>();
+    if (ctrlDoc["kd"].is<JsonVariant>())        ctrl.kd        = ctrlDoc["kd"].as<float>();
+    if (ctrlDoc["bangHigh"].is<JsonVariant>())  ctrl.bangHigh  = ctrlDoc["bangHigh"].as<float>();
+    if (ctrlDoc["bangLow"].is<JsonVariant>())   ctrl.bangLow   = ctrlDoc["bangLow"].as<float>();
+    if (ctrlDoc["outputMin"].is<JsonVariant>()) ctrl.outputMin = ctrlDoc["outputMin"].as<float>();
+    if (ctrlDoc["outputMax"].is<JsonVariant>()) ctrl.outputMax = ctrlDoc["outputMax"].as<float>();
+    if (ctrlDoc["setpoint"].is<JsonVariant>())  ctrl.setpoint  = ctrlDoc["setpoint"].as<float>();
+    if (ctrlDoc["running"].is<JsonVariant>())   ctrl.running   = ctrlDoc["running"].as<bool>();
+    
+    if (ctrlDoc["b"].is<JsonArray>()) {
+        JsonArray bArr = ctrlDoc["b"].as<JsonArray>();
+        for (int i = 0; i <= MAX_DIFF_ORDER && i < bArr.size(); i++) {
+            ctrl.b[i] = bArr[i].as<float>();
+        }
+    }
+    if (ctrlDoc["a"].is<JsonArray>()) {
+        JsonArray aArr = ctrlDoc["a"].as<JsonArray>();
+        for (int i = 0; i < MAX_DIFF_ORDER && i < aArr.size(); i++) {
+            ctrl.a[i] = aArr[i].as<float>();
+        }
+    }
+    _engine->setControlConfig(ctrl);
+
+    // Save automatically
+    if (_storage) {
+        _storage->saveIOConfig(io);
+        _storage->saveControlConfig(ctrl);
+    }
+    
+    Serial.println("[WebManager] Configuration imported and saved successfully");
     req->send(200, "application/json", "{\"ok\":true}");
 }
 

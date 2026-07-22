@@ -10,17 +10,32 @@ const char INDEX_HTML[] PROGMEM = R"rawliteral(
 <title>ESP32 Universal Controller</title>
 <style>
 :root {
-  --bg-body: #0f1923;
-  --bg-card: #1a2735;
-  --bg-hover: #243447;
-  --accent: #00b4d8;
-  --text-main: #e0e6ed;
-  --text-sec: #8899aa;
-  --success: #2ecc71;
+  --ash-grey: #b4b8abff;
+  --deep-space-blue: #153243ff;
+  --yale-blue: #284b63ff;
+  --ivory: #f4f9e9ff;
+  --soft-linen: #eef0ebff;
+
+  --bg-body: var(--soft-linen);
+  --bg-card: var(--ivory);
+  --bg-hover: #e0e8f0;
+  --accent: var(--yale-blue);
+  --text-main: var(--deep-space-blue);
+  --text-sec: #666666;
+  --success: #28a745;
   --warning: #f39c12;
-  --danger: #e74c3c;
-  --border: #2a3a4a;
+  --danger: #dc3545;
+  --border: var(--ash-grey);
   --radius: 4px;
+}
+[data-theme="dark"] {
+  --bg-body: var(--deep-space-blue);
+  --bg-card: var(--yale-blue);
+  --bg-hover: #1f3f54;
+  --accent: var(--ash-grey);
+  --text-main: var(--ivory);
+  --text-sec: var(--ash-grey);
+  --border: var(--ash-grey);
 }
 * { box-sizing: border-box; margin: 0; padding: 0; }
 body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: var(--bg-body); color: var(--text-main); font-size: 14px; }
@@ -50,7 +65,7 @@ select:focus, input:focus { outline: none; border-color: var(--accent); }
 .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; }
 .grid-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 15px; }
 .grid-4 { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; }
-#plotCanvas { width: 100%; height: 350px; background: var(--bg-body); border: 1px solid var(--border); border-radius: var(--radius); margin-bottom: 10px; display: block; }
+#plotCanvas { width: 100%; height: 350px; background: #101c24; border: 1px solid var(--border); border-radius: var(--radius); margin-bottom: 10px; display: block; }
 .legend { display: flex; gap: 15px; justify-content: center; margin-bottom: 15px; }
 .legend-item { display: flex; align-items: center; gap: 5px; cursor: pointer; color: var(--text-sec); }
 .legend-color { width: 12px; height: 12px; border-radius: 2px; }
@@ -79,12 +94,20 @@ input[type=range]::-webkit-slider-runnable-track { width: 100%; height: 4px; cur
 .msg.error { background: var(--danger); color: #fff; display: block; }
 .d-flex { display: flex; gap: 10px; align-items: center; }
 </style>
+<script>
+  const savedTheme = localStorage.getItem('theme') || 'dark';
+  document.documentElement.setAttribute('data-theme', savedTheme);
+</script>
 </head>
 <body>
 
 <header>
   <div style="font-size:16px; font-weight:bold;">ESP32 Universal Controller</div>
+  <div id="save-status-text" style="font-size:12px; color:var(--text-sec); flex:1; text-align:center;"></div>
   <div class="d-flex">
+    <button class="btn" onclick="toggleTheme()" style="padding: 4px 8px;" title="Alternar Tema">
+      <svg viewBox="0 0 24 24" width="16" height="16"><path fill="currentColor" d="M12 21c-4.97 0-9-4.03-9-9s4.03-9 9-9 9 4.03 9 9-4.03 9-9 9zm0-16v14c3.87 0 7-3.13 7-7s-3.13-7-7-7z"/></svg>
+    </button>
     <span id="global-status" style="padding: 4px 8px; border-radius: 4px; background: var(--border); font-size: 11px; font-weight: bold; margin-right: 15px; color: var(--text-sec);">[○ PARADO]</span>
     <div class="status-dot" id="ws-status" title="Disconnected"></div>
   </div>
@@ -276,7 +299,10 @@ input[type=range]::-webkit-slider-runnable-track { width: 100%; height: 4px; cur
       <div class="legend-item" onclick="toggleTrace(3)" id="leg-3"><div class="legend-color" style="background:#e74c3c"></div>Erro</div>
     </div>
     
-    <button class="btn" onclick="exportCSV()"><svg viewBox="0 0 24 24"><path d="M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z"/></svg> Exportar CSV</button>
+    <div class="d-flex" style="justify-content:center; gap:15px;">
+      <button class="btn" onclick="exportCSV()"><svg viewBox="0 0 24 24" width="16" height="16"><path fill="currentColor" d="M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z"/></svg> Exportar CSV</button>
+      <button class="btn" onclick="clearPlot()"><svg viewBox="0 0 24 24" width="16" height="16"><path fill="currentColor" d="M15 16h4v2h-4zm0-8h7v2h-7zm0 4h6v2h-6zM3 18c0 1.1.9 2 2 2h6c1.1 0 2-.9 2-2V8H3v10zM14 5h-3l-1-1H6L5 5H2v2h12z"/></svg> Limpar Gráfico</button>
+    </div>
   </div>
 
   <!-- TAB 4: SISTEMA -->
@@ -300,10 +326,28 @@ input[type=range]::-webkit-slider-runnable-track { width: 100%; height: 4px; cur
     </div>
 
     <div class="card">
-      <h2>Persistência</h2>
-      <div class="d-flex">
-        <button class="btn" onclick="postApi('/api/save')"><svg viewBox="0 0 24 24"><path d="M17 3H5c-1.11 0-2 .9-2 2v14c0 1.1.89 2 2 2h14c1.1 0 2-.9 2-2V7l-4-4zm-5 16c-1.66 0-3-1.34-3-3s1.34-3 3-3 3 1.34 3 3-1.34 3-3 3zm3-10H5V5h10v4z"/></svg> Salvar Config na Flash</button>
-        <button class="btn btn-danger" onclick="if(confirm('Restaurar padrões de fábrica?')) postApi('/api/defaults')"><svg viewBox="0 0 24 24"><path d="M17.65 6.35C16.2 4.9 14.21 4 12 4c-4.42 0-7.99 3.58-7.99 8s3.57 8 7.99 8c3.73 0 6.84-2.55 7.73-6h-2.08c-.82 2.33-3.04 4-5.65 4-3.31 0-6-2.69-6-6s2.69-6 6-6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z"/></svg> Restaurar Defaults</button>
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:15px; border-bottom:1px solid var(--border); padding-bottom:8px;">
+        <h2 style="border:none; margin:0; padding:0;">Persistência</h2>
+        <div class="d-flex" style="font-size:12px;">
+           <label class="switch">
+             <input type="checkbox" id="auto-save-en" onchange="toggleAutoSave()">
+             <span class="slider"></span>
+           </label>
+           <span>Auto-Save (NVS)</span>
+        </div>
+      </div>
+      <div id="auto-save-warn" class="hidden" style="color:var(--warning); font-size:11px; margin-bottom:15px; text-align:right;">
+        Atenção: A memória Flash possui ciclo de escrita limitado. Use com moderação.
+      </div>
+      
+      <div style="display:flex; gap:15px; flex-wrap:wrap;">
+        <button class="btn btn-success" onclick="postApi('/api/save')" style="flex:1; min-width:180px; justify-content:center;"><svg viewBox="0 0 24 24" width="18" height="18"><path fill="currentColor" d="M17 3H5c-1.11 0-2 .9-2 2v14c0 1.1.89 2 2 2h14c1.1 0 2-.9 2-2V7l-4-4zm-5 16c-1.66 0-3-1.34-3-3s1.34-3 3-3 3 1.34 3 3-1.34 3-3 3zm3-10H5V5h10v4z"/></svg> Salvar na Flash</button>
+        <button class="btn btn-primary" onclick="exportConfig()" style="flex:1; min-width:150px; justify-content:center;">📤 Exportar (.json)</button>
+        <button class="btn btn-primary" onclick="document.getElementById('import-file').click()" style="flex:1; min-width:150px; justify-content:center;">📥 Importar (.json)</button>
+        <input type="file" id="import-file" accept=".json" style="display:none;" onchange="importConfig(event)">
+      </div>
+      <div style="margin-top:15px; border-top:1px dashed var(--border); padding-top:15px;">
+        <button class="btn btn-danger" onclick="if(confirm('Restaurar padrões de fábrica?')) postApi('/api/defaults')" style="width:100%; justify-content:center;"><svg viewBox="0 0 24 24" width="18" height="18"><path fill="currentColor" d="M17.65 6.35C16.2 4.9 14.21 4 12 4c-4.42 0-7.99 3.58-7.99 8s3.57 8 7.99 8c3.73 0 6.84-2.55 7.73-6h-2.08c-.82 2.33-3.04 4-5.65 4-3.31 0-6-2.69-6-6s2.69-6 6-6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z"/></svg> Restaurar Defaults</button>
       </div>
     </div>
   </div>
@@ -316,6 +360,95 @@ let csvHistory = [];
 let t0 = 0;
 let tData = { t:[], in:[], out:[], sp:[], err:[] };
 let traces = [true, true, true, true]; // visibilities
+
+let autoSaveTimer = null;
+let autoSaveEnabled = false;
+let latestConfigJSON = null;
+let lastSaveTime = null;
+
+setInterval(() => {
+  if(!autoSaveEnabled || !lastSaveTime) return;
+  const mins = Math.floor((Date.now() - lastSaveTime) / 60000);
+  const st = document.getElementById('save-status-text');
+  if(mins === 0) st.innerText = "Salvo agora";
+  else st.innerText = `Salvo há ${mins} minuto${mins > 1 ? 's' : ''}`;
+}, 10000);
+
+function scheduleAutoSave() {
+  if (!autoSaveEnabled) return;
+  if (autoSaveTimer) clearTimeout(autoSaveTimer);
+  document.getElementById('save-status-text').innerText = "Salvando...";
+  autoSaveTimer = setTimeout(async () => {
+    if (await postApi('/api/save')) {
+      lastSaveTime = Date.now();
+      showMsg("Auto-Save: Salvo na Flash", false);
+      document.getElementById('save-status-text').innerText = "Salvo agora";
+    } else {
+      document.getElementById('save-status-text').innerText = "Erro ao salvar";
+    }
+  }, 60000);
+}
+
+function toggleAutoSave() {
+  autoSaveEnabled = document.getElementById('auto-save-en').checked;
+  const warn = document.getElementById('auto-save-warn');
+  const st = document.getElementById('save-status-text');
+  if (autoSaveEnabled) {
+    warn.classList.remove('hidden');
+    if(!lastSaveTime) st.innerText = "Auto-save ativado (Aguardando)";
+    else {
+      const mins = Math.floor((Date.now() - lastSaveTime) / 60000);
+      if(mins === 0) st.innerText = "Salvo agora";
+      else st.innerText = `Salvo há ${mins} minuto${mins > 1 ? 's' : ''}`;
+    }
+  } else {
+    warn.classList.add('hidden');
+    st.innerText = "";
+  }
+}
+
+function exportConfig() {
+  if (!latestConfigJSON) { showMsg("Configuração ainda não carregada", true); return; }
+  const blob = new Blob([JSON.stringify(latestConfigJSON, null, 2)], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'config_esp32.json';
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+}
+
+function importConfig(e) {
+  const file = e.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = async (evt) => {
+    try {
+      const json = JSON.parse(evt.target.result);
+      await postApi('/api/import-config', json);
+      if(ws && ws.readyState===1) ws.send(JSON.stringify({cmd:"get_config"}));
+    } catch(err) {
+      showMsg("Erro ao ler JSON: " + err.message, true);
+    }
+  };
+  reader.readAsText(file);
+  e.target.value = ''; // Reset input
+}
+
+function clearPlot() {
+  tData = { t:[], in:[], out:[], sp:[], err:[] };
+  csvHistory = [];
+  t0 = 0;
+  drawPlot();
+}
+
+function toggleTheme() {
+  const t = document.documentElement.getAttribute('data-theme') === 'dark' ? 'light' : 'dark';
+  document.documentElement.setAttribute('data-theme', t);
+  localStorage.setItem('theme', t);
+  drawPlot(); // Redraw with new colors
+}
 
 function showTab(id, el) {
   document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
@@ -399,16 +532,18 @@ function showMsg(msg, isErr=false) {
 
 async function postApi(url, data=null) {
   try {
-    let opts = { method: 'POST' };
-    if(data) {
-      opts.headers = { 'Content-Type': 'application/json' };
+    const opts = { method: 'POST' };
+    if (data) {
+      opts.headers = {'Content-Type': 'application/json'};
       opts.body = JSON.stringify(data);
     }
     const res = await fetch(url, opts);
-    if(res.ok) showMsg("Sucesso!");
-    else showMsg("Erro na requisição: " + res.status, true);
-  } catch(e) {
-    showMsg("Erro: " + e.message, true);
+    if (!res.ok) throw new Error("Status " + res.status);
+    showMsg("Sucesso!", false);
+    return true;
+  } catch(err) {
+    showMsg("Erro: " + err.message, true);
+    return false;
   }
 }
 
@@ -425,7 +560,7 @@ function applyIO() {
     setpointSource: document.getElementById('ext-sp-en').checked ? 1 : 0,
     setpointPin: parseInt(document.getElementById('ext-sp-pin').value)
   };
-  postApi('/api/io-config', data);
+  postApi('/api/io-config', data).then(() => scheduleAutoSave());
 }
 
 function applyCtrl() {
@@ -452,7 +587,7 @@ function applyCtrl() {
     outputMax: parseFloat(document.getElementById('out-max').value),
     setpoint: parseFloat(document.getElementById('sp-input').value)
   };
-  postApi('/api/control-config', data);
+  postApi('/api/control-config', data).then(() => scheduleAutoSave());
 }
 
 function applyWifi() {
@@ -495,6 +630,7 @@ function connectWS() {
 }
 
 function handleConfig(cfg) {
+  latestConfigJSON = cfg;
   if(cfg.io) {
     document.getElementById('io-in-pin').value = cfg.io.inputPin;
     document.getElementById('io-in-mode').value = cfg.io.inputMode;
@@ -541,7 +677,15 @@ function handleConfig(cfg) {
 
 function handleStatus(st) {
   if(st.ip) document.getElementById('sys-ip').innerText = st.ip;
-  if(st.ssid) document.getElementById('sys-ssid').innerText = st.ssid;
+  if(st.ssid) {
+    document.getElementById('sys-ssid').innerText = st.ssid;
+    // Auto-fill Wi-Fi config input if empty
+    const ssidInput = document.getElementById('wifi-ssid');
+    if (!ssidInput.value && st.ssid !== "ESP32-Controller") {
+      ssidInput.value = st.ssid;
+      ssidInput.placeholder = `Atualmente conectado a: ${st.ssid}`;
+    }
+  }
   if(st.hostname) document.getElementById('sys-host').innerText = st.hostname;
   if(st.rssi !== undefined) document.getElementById('sys-rssi').innerText = st.rssi + " dBm";
   if(st.uptime) document.getElementById('sys-up').innerText = st.uptime + " s";

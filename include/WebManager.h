@@ -46,6 +46,7 @@ private:
     void _handleGetConfig(AsyncWebServerRequest* req);
     void _handlePostIOConfig(AsyncWebServerRequest* req, uint8_t* data, size_t len);
     void _handlePostControlConfig(AsyncWebServerRequest* req, uint8_t* data, size_t len);
+    void _handlePostImportConfig(AsyncWebServerRequest* req, uint8_t* data, size_t len);
     void _handlePostSave(AsyncWebServerRequest* req);
     void _handlePostDefaults(AsyncWebServerRequest* req);
     void _handlePostWiFi(AsyncWebServerRequest* req, uint8_t* data, size_t len);
